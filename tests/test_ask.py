@@ -189,3 +189,81 @@ def test_nothing_is_written_by_asking(conn):
     with conn.cursor() as cur:
         cur.execute("SELECT count(*) AS n FROM qgen_questions")
         assert cur.fetchone()["n"] == before
+
+
+# ---------------------------------------------------------------------------
+# The website fallback - second, never first
+# ---------------------------------------------------------------------------
+
+
+def test_the_site_is_not_consulted_when_the_database_has_material(conn, monkeypatch):
+    """The database holds material written for these courses. Going to the website first would
+    answer from marketing copy when a written explanation was available."""
+    called = []
+    monkeypatch.setattr(
+        "qgen.website.find_material", lambda *a, **k: called.append(1) or []
+    )
+
+    outcome = ask(
+        conn,
+        AnsweringLLM(answer_reply("Grounded.", (1,))),
+        question="Which OSI layer routes packets between networks?",
+        site_search="https://example.com/?s={query}",
+    )
+
+    assert outcome.source == "database"
+    assert called == []
+
+
+def test_the_site_is_consulted_when_the_database_has_nothing(conn, monkeypatch):
+    from qgen.domain.answering import Snippet
+
+    monkeypatch.setattr(
+        "qgen.website.find_material",
+        lambda *a, **k: [
+            Snippet(
+                source="the course website",
+                course="https://example.com/?s=photosynthesis",
+                text="Photosynthesis in chloroplasts converts light energy into chemical energy, "
+                "storing it in glucose, and this passage is long enough to be treated as real "
+                "content rather than as navigation furniture on the page.",
+            )
+        ],
+    )
+
+    outcome = ask(
+        conn,
+        AnsweringLLM(answer_reply("From the site.", (1,))),
+        question="Explain photosynthesis in chloroplasts",
+        site_search="https://example.com/?s={query}",
+    )
+
+    assert outcome.source == "website"
+    assert outcome.material
+    assert "Not in the course material" in outcome.provenance
+    assert "example.com" in outcome.provenance
+
+
+def test_with_no_site_configured_nothing_is_fetched(conn, monkeypatch):
+    called = []
+    monkeypatch.setattr("qgen.website.find_material", lambda *a, **k: called.append(1) or [])
+
+    outcome = ask(conn, AnsweringLLM(), question="Explain photosynthesis in chloroplasts")
+
+    assert called == []
+    assert outcome.source == "database"
+    assert "no course material on this" in outcome.provenance
+
+
+def test_a_site_that_has_nothing_either_falls_back_to_saying_so(conn, monkeypatch):
+    monkeypatch.setattr("qgen.website.find_material", lambda *a, **k: [])
+
+    outcome = ask(
+        conn,
+        AnsweringLLM(),
+        question="Explain photosynthesis in chloroplasts",
+        site_search="https://example.com/?s={query}",
+    )
+
+    assert outcome.material == ()
+    assert outcome.source == "database"

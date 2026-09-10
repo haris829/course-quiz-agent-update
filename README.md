@@ -71,6 +71,25 @@ A  Layer 3, the Network layer, is responsible for routing packets between networ
 **Question me on this course** — type a course name and be tested on it. A different question
 every time, and never one from another course.
 
+### Where it looks, in order
+
+1. **The database** — material written for these courses.
+2. **The course website** — only if the database has nothing, and only if one is configured.
+3. Nothing else.
+
+The website is a fallback, never the first stop: the database holds explanations written for
+these courses, and going to the site first would answer from marketing copy when a written
+explanation was available.
+
+Configure it with one line in `.env` — the site's own search URL, with `{query}` where the
+question goes:
+
+```
+QGEN_SITE_SEARCH=https://example.com/?s={query}
+```
+
+Leave it empty and the site is never contacted. There is no crawler and no guessed URL.
+
 ### Where an answer came from is always stated, and always checkable
 
 The page shows the same numbered material the model was given, with the items it cited marked.
@@ -81,6 +100,7 @@ Three situations, three different sentences — none of them dressed up as anoth
 | It used the material | *Answered from 2 items of course material from Criminology (Postgraduate).* |
 | Material was found but did not cover it | *The course material found did not cover this, so the answer is general subject knowledge.* |
 | The named course holds nothing on it | *Criminology (Postgraduate) holds nothing on this… and no other course was substituted for it.* |
+| The website answered it | *Not in the course material. Answered from the course website (example.com/?s=…).* |
 
 ---
 
@@ -153,6 +173,7 @@ qgen/
     replies.py       reading a model's reply: JSON extraction, whitespace
   catalogue.py     reading the course catalogue
   library.py       finding material to answer from (the only cross-schema read)
+  website.py       the course-website fallback (the only file that uses the network)
   practice.py      one question from a course, and the marking of it
   answers.py       the live ask, end to end
   service.py       generation: batching, concurrency, repeat-avoidance
@@ -161,7 +182,7 @@ qgen/
   web.py           the HTTP routes
   cli.py           the command line
   static/          the page
-tests/             315 tests
+tests/             336 tests
 ```
 
 The `domain/` package is where the logic most likely to be wrong lives, and it is the part that
@@ -172,10 +193,10 @@ needs neither a database nor a network to test.
 ## Tests
 
 ```bash
-python -m pytest        # 315 tests
+python -m pytest        # 336 tests
 ```
 
-**197 of the 315 need no database and no network** — the parser, the prompts, the lookup rules,
+**218 of the 336 need no database and no network** — the parser, the prompts, the lookup rules,
 the ranking, and the model client. The rest connect to `QGEN_DATABASE_URL` inside a transaction
 that is always rolled back, so a run leaves the database exactly as it found it. Without a
 reachable database those tests skip rather than fail.

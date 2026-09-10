@@ -91,13 +91,17 @@ def create_app(settings: Settings | None = None, llm: QuestionLLM | None = None)
         is returned alongside the answer, so "grounded in the course" is something the reader
         can check rather than take on trust.
         """
-        outcome = ask(conn, model, question=body.question, course_ref=body.course)
+        outcome = ask(
+            conn, model, question=body.question, course_ref=body.course,
+            site_search=resolved.site_search,
+        )
         return {
             "question": outcome.question,
             "answer": outcome.answer,
             "course": outcome.course_title,
             "course_code": outcome.course_code,
             "grounded": outcome.grounded,
+            "source": outcome.source,
             "provenance": outcome.provenance,
             "used": list(outcome.used),
             "material": [

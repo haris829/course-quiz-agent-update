@@ -13,7 +13,7 @@ from dataclasses import dataclass
 
 import psycopg
 
-from . import catalogue, library
+from . import catalogue, library, website
 from .domain.answering import (
     MAX_SNIPPETS,
     Snippet,
@@ -45,6 +45,8 @@ class AskOutcome:
     #: Which of it the model said it used (1-based, into ``material``).
     used: tuple[int, ...]
     citations_unavailable: bool
+    #: Where the material came from: "database", "website", or "nothing".
+    source: str = "database"
 
     @property
     def grounded(self) -> bool:
@@ -54,6 +56,17 @@ class AskOutcome:
     @property
     def provenance(self) -> str:
         """One sentence for the reader. Never claims more than happened."""
+        # The website case is tested first, and that ordering is the point. Material fetched
+        # from the site is not course material, and reporting it as such would tell a reader
+        # their answer came from the syllabus when it came from a web page.
+        if self.source == "website" and self.material:
+            where = self.material[0].course or "the course website"
+            if self.used:
+                return f"Not in the course material. Answered from the course website ({where})."
+            return (
+                f"Not in the course material. The course website was consulted ({where}) but "
+                "did not cover it either, so the answer is general subject knowledge."
+            )
         if self.citations_unavailable:
             return (
                 f"{len(self.material)} items from the course library were used to write this, "
@@ -90,6 +103,7 @@ def ask(
     *,
     question: str,
     course_ref: str | None = None,
+    site_search: str = "",
 ) -> AskOutcome:
     """Answer one question, live.
 
@@ -113,6 +127,16 @@ def ask(
     terms = keywords(text)
     found = library.find_material(conn, terms, course_title=title, course_code=code)
     material = rank(found, terms, limit=MAX_SNIPPETS)
+    source = "database"
+
+    if not material and site_search:
+        # Only now. The database holds material written for these courses; the website is for
+        # what it has not got, and consulting it first would answer from marketing copy when a
+        # written explanation was available.
+        from_site = website.find_material(text, search_template=site_search)
+        material = rank(from_site, terms, limit=MAX_SNIPPETS)
+        if material:
+            source = "website"
 
     reply = llm.complete(
         build_answer_prompt(text, material, course=title),
@@ -132,6 +156,7 @@ def ask(
         material=tuple(material),
         used=answer.used,
         citations_unavailable=answer.citations_unavailable,
+        source=source,
     )
 
 

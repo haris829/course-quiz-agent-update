@@ -73,6 +73,9 @@ class Settings:
     llm_model: str = ""
     llm_region: str = "us-east-1"
     llm_timeout_seconds: float = 120.0
+    #: The course website's own search URL, with ``{query}`` where the question goes. Consulted
+    #: only when the database has nothing. Empty means the site is never contacted.
+    site_search: str = ""
 
     @property
     def llm_configured(self) -> bool:
@@ -117,4 +120,5 @@ def load_settings(env: dict[str, str] | None = None) -> Settings:
         llm_model=(values.get("COACHING_LLM_MODEL") or "").strip(),
         llm_region=(values.get("COACHING_LLM_REGION") or "").strip() or "us-east-1",
         llm_timeout_seconds=timeout,
+        site_search=(values.get("QGEN_SITE_SEARCH") or "").strip(),
     )
