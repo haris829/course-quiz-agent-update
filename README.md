@@ -196,7 +196,7 @@ needs neither a database nor a network to test.
 python -m pytest        # 336 tests
 ```
 
-**218 of the 336 need no database and no network** — the parser, the prompts, the lookup rules,
+**214 of the 336 need no database and no network** — the parser, the prompts, the lookup rules,
 the ranking, and the model client. The rest connect to `QGEN_DATABASE_URL` inside a transaction
 that is always rolled back, so a run leaves the database exactly as it found it. Without a
 reachable database those tests skip rather than fail.
