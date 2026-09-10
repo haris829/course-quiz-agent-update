@@ -7,3 +7,4 @@ httpx>=0.27
 fastapi>=0.115
 pydantic>=2.9
 uvicorn>=0.30
+pymssql>=2.3

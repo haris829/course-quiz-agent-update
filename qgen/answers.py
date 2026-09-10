@@ -13,7 +13,7 @@ from dataclasses import dataclass
 
 import psycopg
 
-from . import catalogue, library, website
+from . import catalogue, legal, library, website
 from .domain.answering import (
     MAX_SNIPPETS,
     Snippet,
@@ -29,6 +29,19 @@ from .llm import QuestionLLM
 #: The output budget for one answer. Six sentences and a short citation list; the ceiling exists
 #: so a runaway reply cannot cost a fortune, not to shape the answer.
 ANSWER_MAX_TOKENS = 1200
+
+#: The reference database is searched on every question, not only when the course material is
+#: empty, and the two are merged and ranked together.
+#:
+#: Two thresholds were tried and both were wrong. Searching only on *zero* course material meant
+#: "How long do I have to bring a defamation claim?" never reached it, because a handful of
+#: loosely related course questions counted as coverage - while the reference database holds the
+#: exact answer, "Defamation: 1 year, s.4A Limitation Act 1980". Raising the threshold just moved
+#: the line to a different set of questions it got wrong.
+#:
+#: Judging relevance before the ranking has run is guesswork. The search costs about a second,
+#: the ranking already decides what earns a place in the prompt, and letting it see everything is
+#: both simpler and better. If that second ever matters, cache it - do not reintroduce a guess.
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,6 +72,17 @@ class AskOutcome:
         # The website case is tested first, and that ordering is the point. Material fetched
         # from the site is not course material, and reporting it as such would tell a reader
         # their answer came from the syllabus when it came from a web page.
+        if self.source == "legal database" and self.material:
+            where = ", ".join(sorted({m.source for m in self.material})) or "the reference database"
+            if self.used:
+                return (
+                    f"Not in the course material. Answered from the company's legal reference "
+                    f"database ({where})."
+                )
+            return (
+                "Not in the course material. The legal reference database was searched but did "
+                "not cover it, so the answer is general subject knowledge."
+            )
         if self.source == "website" and self.material:
             where = self.material[0].course or "the course website"
             if self.used:
@@ -104,6 +128,7 @@ def ask(
     question: str,
     course_ref: str | None = None,
     site_search: str = "",
+    legal_source: legal.LegalSource | None = None,
 ) -> AskOutcome:
     """Answer one question, live.
 
@@ -128,6 +153,17 @@ def ask(
     found = library.find_material(conn, terms, course_title=title, course_code=code)
     material = rank(found, terms, limit=MAX_SNIPPETS)
     source = "database"
+
+    if legal_source is not None and legal_source.configured:
+        # The company's legal reference database. Searched second and merged, not substituted:
+        # the course material is written for these courses and keeps its place, while a precise
+        # statutory answer the courses do not carry is worth having alongside it.
+        from_legal = legal.find_material(legal_source, terms)
+        if from_legal:
+            merged = rank([*found, *from_legal], terms, limit=MAX_SNIPPETS)
+            if any(s in [x.source for x in merged] for s in ("limitation periods", "legal guidance")):
+                source = "legal database"
+            material = merged
 
     if not material and site_search:
         # Only now. The database holds material written for these courses; the website is for

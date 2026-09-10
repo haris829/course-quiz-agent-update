@@ -76,6 +76,13 @@ class Settings:
     #: The course website's own search URL, with ``{query}`` where the question goes. Consulted
     #: only when the database has nothing. Empty means the site is never contacted.
     site_search: str = ""
+    #: The company's SQL Server legal reference database. Consulted when the course material has
+    #: nothing. Empty host means it is never contacted.
+    legal_host: str = ""
+    legal_port: str = "1433"
+    legal_database: str = ""
+    legal_user: str = ""
+    legal_password: str = ""
 
     @property
     def llm_configured(self) -> bool:
@@ -121,4 +128,9 @@ def load_settings(env: dict[str, str] | None = None) -> Settings:
         llm_region=(values.get("COACHING_LLM_REGION") or "").strip() or "us-east-1",
         llm_timeout_seconds=timeout,
         site_search=(values.get("QGEN_SITE_SEARCH") or "").strip(),
+        legal_host=(values.get("QGEN_MSSQL_HOST") or "").strip(),
+        legal_port=(values.get("QGEN_MSSQL_PORT") or "1433").strip(),
+        legal_database=(values.get("QGEN_MSSQL_DATABASE") or "").strip(),
+        legal_user=(values.get("QGEN_MSSQL_USER") or "").strip(),
+        legal_password=(values.get("QGEN_MSSQL_PASSWORD") or "").strip(),
     )

@@ -22,7 +22,7 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
-from . import catalogue, practice, storage
+from . import catalogue, legal, practice, storage
 from .answers import ask
 from .config import Settings, load_settings
 from .db import connect
@@ -94,6 +94,11 @@ def create_app(settings: Settings | None = None, llm: QuestionLLM | None = None)
         outcome = ask(
             conn, model, question=body.question, course_ref=body.course,
             site_search=resolved.site_search,
+            legal_source=legal.LegalSource(
+                host=resolved.legal_host, port=resolved.legal_port,
+                database=resolved.legal_database, user=resolved.legal_user,
+                password=resolved.legal_password,
+            ),
         )
         return {
             "question": outcome.question,
