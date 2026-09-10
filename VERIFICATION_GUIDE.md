@@ -1,5 +1,5 @@
 # Verification Guide
-### Course Quiz Agent · `qgen` · Release R1
+### Course Question Agent · `qgen` · Release R1
 
 *For the client and the PMO. This document tells you how to test the system yourself, what a pass
 looks like, and what cannot be signed off yet.*

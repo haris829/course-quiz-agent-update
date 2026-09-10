@@ -1,4 +1,4 @@
-# Course Quiz Agent
+# Course Question Agent
 
 Two things over the courses held in a PostgreSQL database:
 
