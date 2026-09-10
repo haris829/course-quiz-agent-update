@@ -63,6 +63,27 @@ def _target_columns(conn: psycopg.Connection, table: str) -> set[str]:
         return {record["column_name"] for record in cur.fetchall()}
 
 
+#: Above this many courses, the catalogue is taken to be loaded already.
+#:
+#: The load runs on every start, because a deployment has no other moment to run it in. It is
+#: idempotent, but three thousand no-op inserts on every restart is waste, and a container that
+#: takes ten seconds longer to answer its health check for no reason is a container that looks
+#: broken. A count is one query.
+ALREADY_LOADED_ABOVE = 5
+
+
+def already_loaded(conn: psycopg.Connection) -> bool:
+    """Whether this database already has a catalogue worth the name."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT count(*) AS n FROM information_schema.tables WHERE table_name = 'qc_courses'"
+        )
+        if not cur.fetchone()["n"]:
+            return False
+        cur.execute("SELECT count(*) AS n FROM qc_courses")
+        return cur.fetchone()["n"] > ALREADY_LOADED_ABOVE
+
+
 def load(conn: psycopg.Connection, path: Path = DEFAULT_PATH) -> dict[str, str]:
     """Load the export into this database. Idempotent, additive, never destructive."""
     if not path.is_file():

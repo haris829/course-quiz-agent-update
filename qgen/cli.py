@@ -116,10 +116,13 @@ def _export_reference(args: argparse.Namespace) -> int:
 
 
 def _load_reference(args: argparse.Namespace) -> int:
-    from .seed import DEFAULT_PATH, load
+    from .seed import DEFAULT_PATH, already_loaded, load
 
     settings = load_settings()
     with connect(settings.database_url) as conn:
+        if not args.force and already_loaded(conn):
+            print("the catalogue is already loaded; nothing to do (--force to load anyway)")
+            return 0
         report = load(conn, DEFAULT_PATH)
     print("loaded into this database:")
     for table, note in report.items():
@@ -152,9 +155,13 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser(
         "export-reference", help="write the courses and question bank to reference_data.json.gz"
     ).set_defaults(run=_export_reference)
-    sub.add_parser(
+    load_ref = sub.add_parser(
         "load-reference", help="load reference_data.json.gz into this database (additive)"
-    ).set_defaults(run=_load_reference)
+    )
+    load_ref.add_argument(
+        "--force", action="store_true", help="load even if a catalogue is already present"
+    )
+    load_ref.set_defaults(run=_load_reference)
 
     run = sub.add_parser("generate", help="generate questions for one course")
     run.add_argument("--course", required=True, help="course code or name, e.g. 'Criminology'")
