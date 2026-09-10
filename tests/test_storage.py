@@ -373,3 +373,27 @@ def test_the_run_row_records_what_was_stored_and_why_the_rest_was_not(db):
     assert run["course_code"] == CRIMINOLOGY
     assert run["status"] == "SHORT"
     assert "option" in (run["refusals"] or "")
+
+
+def test_the_catalogue_reads_a_table_that_lacks_the_later_columns(conn):
+    """The same table exists in two shapes, and the deployed one is the older.
+
+    Selecting a column the table has not got fails the whole query with UndefinedColumn - which
+    is what the first Railway deploy did. This proves the read adapts instead.
+    """
+    with conn.cursor() as cur:
+        cur.execute("CREATE TEMP TABLE qc_courses_backup AS SELECT * FROM qc_courses")
+        cur.execute("ALTER TABLE qc_courses DROP COLUMN description")
+        cur.execute("ALTER TABLE qc_courses DROP COLUMN rqf_level")
+        cur.execute("ALTER TABLE qc_courses DROP COLUMN subject_area")
+
+    courses = catalogue.list_courses(conn)
+    matched = catalogue.find_course(conn, CRIMINOLOGY)
+
+    assert len(courses) >= 33
+    assert matched is not None and matched.code == CRIMINOLOGY
+    # Absent, not invented.
+    assert matched.description is None
+    assert matched.rqf_level is None
+    # And the brief still says honestly where the questions would come from.
+    assert "no description" in catalogue.brief_for(CRIMINOLOGY, matched).grounding

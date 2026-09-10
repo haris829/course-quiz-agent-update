@@ -22,10 +22,30 @@ from .domain.resolution import (
     wants_partial_match,
 )
 
-#: Every column the generator can use. ``description``, ``rqf_level`` and ``subject_area`` are
-#: NULL on all 33 rows today; they are selected anyway so that the day the platform import runs,
-#: the questions improve without a code change.
-_COLUMNS = "code, title, description, rqf_level, subject_area"
+#: Always present. A catalogue row without these is not a course.
+_REQUIRED = ("code", "title")
+
+#: Present only where the catalogue has been through the platform's later import. Selected when
+#: they exist, so the questions improve the day that import runs, with no code change.
+#:
+#: They are checked for rather than assumed because the same table exists in two shapes. The
+#: deployed database was created by the earlier import and has the title and nothing else;
+#: selecting a column it has not got fails the whole query with ``UndefinedColumn`` - which is
+#: exactly what happened on the first deploy. Reading defensively is cheaper than requiring every
+#: environment to be migrated in step, and far cheaper than altering a table another service owns.
+_OPTIONAL = ("description", "rqf_level", "subject_area")
+
+
+def _columns(conn: psycopg.Connection) -> str:
+    """The SELECT list this database can actually satisfy."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_name = 'qc_courses' AND column_name = ANY(%s)",
+            (list(_OPTIONAL),),
+        )
+        present = {record["column_name"] for record in cur.fetchall()}
+    return ", ".join([*_REQUIRED, *(c for c in _OPTIONAL if c in present)])
 
 
 def _row(record: dict) -> CourseRow:
@@ -44,8 +64,9 @@ def list_courses(conn: psycopg.Connection) -> list[CourseRow]:
     Ordered by title rather than by code because a person choosing one reads the name; nobody
     outside this system knows that ``LL-34590`` is Criminology.
     """
+    columns = _columns(conn)
     with conn.cursor() as cur:
-        cur.execute(f"SELECT {_COLUMNS} FROM qc_courses ORDER BY title")
+        cur.execute(f"SELECT {columns} FROM qc_courses ORDER BY title")
         return [_row(record) for record in cur.fetchall()]
 
 
@@ -60,22 +81,23 @@ def find_course(conn: psycopg.Connection, course_ref: str) -> CourseRow | None:
     if not reference:
         return None
     lowered = reference.lower()
+    columns = _columns(conn)
 
     with conn.cursor() as cur:
         cur.execute(
-            f"SELECT {_COLUMNS} FROM qc_courses WHERE lower(code) = %s LIMIT 2", (lowered,)
+            f"SELECT {columns} FROM qc_courses WHERE lower(code) = %s LIMIT 2", (lowered,)
         )
         by_code = [_row(record) for record in cur.fetchall()]
 
         cur.execute(
-            f"SELECT {_COLUMNS} FROM qc_courses WHERE lower(title) = %s LIMIT 2", (lowered,)
+            f"SELECT {columns} FROM qc_courses WHERE lower(title) = %s LIMIT 2", (lowered,)
         )
         by_title = [_row(record) for record in cur.fetchall()]
 
         by_partial: list[CourseRow] = []
         if wants_partial_match(reference):
             cur.execute(
-                f"SELECT {_COLUMNS} FROM qc_courses "
+                f"SELECT {columns} FROM qc_courses "
                 "WHERE lower(title) LIKE %s ESCAPE '\\' LIMIT 2",
                 (escape_like(lowered),),
             )

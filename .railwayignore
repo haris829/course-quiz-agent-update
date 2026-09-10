@@ -1,0 +1,7 @@
+# Never upload credentials or local scratch to the build.
+.env
+.git
+__pycache__
+.pytest_cache
+.ruff_cache
+tests
