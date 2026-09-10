@@ -1,2 +1,9 @@
+# The database driver, and the HTTP client used for Bedrock and the website fallback.
 psycopg[binary]>=3.1
 httpx>=0.27
+
+# The page and its routes. `python -m qgen serve` and any deployment need these;
+# the CLI commands and the whole test suite run without them being reachable.
+fastapi>=0.115
+pydantic>=2.9
+uvicorn>=0.30
