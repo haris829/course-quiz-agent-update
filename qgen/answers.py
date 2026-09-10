@@ -67,58 +67,45 @@ class AskOutcome:
         return bool(self.used)
 
     @property
+    def cited(self) -> tuple[Snippet, ...]:
+        """The material the model actually said it used."""
+        return tuple(self.material[index - 1] for index in self.used)
+
+    @property
     def provenance(self) -> str:
-        """One sentence for the reader. Never claims more than happened."""
-        # The website case is tested first, and that ordering is the point. Material fetched
-        # from the site is not course material, and reporting it as such would tell a reader
-        # their answer came from the syllabus when it came from a web page.
-        if self.source == "legal database" and self.material:
-            where = ", ".join(sorted({m.source for m in self.material})) or "the reference database"
-            if self.used:
-                return (
-                    f"Not in the course material. Answered from the company's legal reference "
-                    f"database ({where})."
-                )
-            return (
-                "Not in the course material. The legal reference database was searched but did "
-                "not cover it, so the answer is general subject knowledge."
-            )
-        if self.source == "website" and self.material:
-            where = self.material[0].course or "the course website"
-            if self.used:
-                return f"Not in the course material. Answered from the course website ({where})."
-            return (
-                f"Not in the course material. The course website was consulted ({where}) but "
-                "did not cover it either, so the answer is general subject knowledge."
-            )
+        """One sentence for the reader. Never claims more than happened.
+
+        Derived from what was **cited**, never from which searches happened to run. An earlier
+        version set a flag when the reference database was merged into the material, and then
+        reported an answer built entirely from course questions as having come from the
+        reference database. Where an answer came from is the one thing on this page that has to
+        be true, so it is read back off the citations rather than tracked alongside them.
+        """
         if self.citations_unavailable:
             return (
-                f"{len(self.material)} items from the course library were used to write this, "
-                "but the model did not say which."
+                f"{len(self.material)} items were used to write this, but the model did not say "
+                "which."
             )
         if self.used:
-            courses = sorted(
-                {
-                    self.material[index - 1].course
-                    for index in self.used
-                    if self.material[index - 1].course
-                }
-            )
-            where = f" from {', '.join(courses)}" if courses else ""
-            return f"Answered from {len(self.used)} items of course material{where}."
-        if self.material:
+            kinds = ", ".join(sorted({snippet.source for snippet in self.cited}))
+            courses = sorted({s.course for s in self.cited if s.course})
+            where = f" - {', '.join(courses)}" if courses else ""
+            return f"Answered from {len(self.used)} items of {kinds}{where}."
+
+        # Nothing was cited. Say what was looked in, so "we have nothing on this" is separable
+        # from "we did not look".
+        searched = ", ".join(sorted({snippet.source for snippet in self.material}))
+        if searched:
             return (
-                "The course material found did not cover this, so the answer is general "
+                f"Nothing in what was found ({searched}) covered this, so the answer is general "
                 "subject knowledge."
             )
         if self.course_title:
-            # Named, because "no material" and "no material *in the course you asked about*"
-            # are different facts, and only the second one tells you to widen the question.
             return (
                 f"{self.course_title} holds nothing on this. The answer is general subject "
                 "knowledge, and no other course was substituted for it."
             )
-        return "There is no course material on this. The answer is general subject knowledge."
+        return "Nothing in the material covers this. The answer is general subject knowledge."
 
 
 def ask(

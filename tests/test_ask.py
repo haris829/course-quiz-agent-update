@@ -102,7 +102,9 @@ def test_an_answer_that_cites_material_is_reported_as_grounded(conn):
     )
 
     assert outcome.grounded is True
-    assert "Answered from 1 items of course material" in outcome.provenance
+    # The wording names the actual source now, rather than calling everything "course material".
+    assert "Answered from 1 items of" in outcome.provenance
+    assert "course question bank" in outcome.provenance
 
 
 def test_an_answer_citing_nothing_is_reported_as_general_knowledge(conn):
@@ -124,7 +126,7 @@ def test_when_no_material_exists_the_answer_says_the_courses_hold_nothing_on_it(
 
     assert outcome.material == ()
     assert outcome.provenance == (
-        "There is no course material on this. The answer is general subject knowledge."
+        "Nothing in the material covers this. The answer is general subject knowledge."
     )
 
 
@@ -240,7 +242,8 @@ def test_the_site_is_consulted_when_the_database_has_nothing(conn, monkeypatch):
 
     assert outcome.source == "website"
     assert outcome.material
-    assert "Not in the course material" in outcome.provenance
+    # Named as the website, not as course material - that distinction is the whole point.
+    assert "the course website" in outcome.provenance
     assert "example.com" in outcome.provenance
 
 
@@ -252,7 +255,7 @@ def test_with_no_site_configured_nothing_is_fetched(conn, monkeypatch):
 
     assert called == []
     assert outcome.source == "database"
-    assert "no course material on this" in outcome.provenance
+    assert "Nothing in the material covers this" in outcome.provenance
 
 
 def test_a_site_that_has_nothing_either_falls_back_to_saying_so(conn, monkeypatch):

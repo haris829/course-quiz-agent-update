@@ -52,6 +52,15 @@ MAX_SNIPPETS = 8
 #: of them do not crowd out the question.
 SNIPPET_CHARS = 600
 
+#: At or below this length, a source counts as short and precise - a statutory line, a limitation
+#: period - and is judged on one keyword match rather than two. See :func:`rank`.
+SHORT_SOURCE_CHARS = 200
+
+#: How many places in the prompt are held for short precise sources that the score alone would
+#: have dropped. Two: enough for a limitation period and the guidance beside it, few enough that
+#: they cannot crowd out material that genuinely scored well.
+RESERVED_FOR_SHORT_SOURCES = 2
+
 _TOKEN = re.compile(r"[a-z0-9]+")
 
 
@@ -110,11 +119,43 @@ def rank(
         return []
     floor = required_matches(terms)
     scored = [(score(snippet, terms), index, snippet) for index, snippet in enumerate(snippets)]
-    hits = [item for item in scored if item[0] >= floor]
-    # Sorted by score, then by the order they arrived - which the database read leaves as newest
-    # first, so a tie goes to the more recent material.
-    hits.sort(key=lambda item: (-item[0], item[1]))
-    return [snippet for _, _, snippet in hits[:limit]]
+    # A short source is held to one match rather than two. The floor exists to stop a long,
+    # rambling passage earning a place on one incidental word - a hazard that does not apply to a
+    # line of ninety characters, where one keyword is most of what the line says.
+    #
+    # Without this, "How long do I have to bring a defamation claim?" dropped the row that
+    # answers it exactly - "Defamation / malicious falsehood: 1 year, under s.4A Limitation Act
+    # 1980" - because it could match only "defamation" out of four keywords, while eight longer
+    # and vaguer course questions cleared the floor and took its place.
+    hits = [
+        item
+        for item in scored
+        if item[0] >= (1 if len(item[2].body) <= SHORT_SOURCE_CHARS else floor)
+    ]
+    # Sorted by score, then - among equals - shortest first, so a precise statutory line beats a
+    # paragraph that happens to contain the same words. Then by arrival, which the database read
+    # leaves newest first.
+    hits.sort(key=lambda item: (-item[0], len(item[2].body) > SHORT_SOURCE_CHARS, item[1]))
+    chosen = [snippet for _, _, snippet in hits[:limit]]
+
+    # Then keep a place for the short precise sources, because sorting by score alone still
+    # loses them. "How long do I have to bring a defamation claim?" scores the statutory line at
+    # one - it can only match "defamation" - while chatty course questions score three on
+    # "long", "bring" and "claim". The line that answers the question came last and was cut.
+    #
+    # Counting matched keywords measures overlap, not authority, and no amount of reordering by
+    # that number fixes it. Reserving slots does, and the honest reason is that a line naming the
+    # statute is worth more to an answer than a paragraph sharing three ordinary words with the
+    # question. Properly this wants term weighting, so that "defamation" counts for more than
+    # "claim"; until then, this.
+    reserved = [
+        snippet
+        for _, _, snippet in hits
+        if len(snippet.body) <= SHORT_SOURCE_CHARS and snippet not in chosen
+    ][:RESERVED_FOR_SHORT_SOURCES]
+    if reserved:
+        chosen = reserved + chosen[: max(0, limit - len(reserved))]
+    return chosen
 
 
 @dataclass(frozen=True, slots=True)

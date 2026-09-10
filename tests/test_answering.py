@@ -122,7 +122,8 @@ def test_a_longer_question_needs_two_matches_so_one_stray_word_is_not_enough():
     material on the strength of the word "explain" alone, and the page then called the answer
     grounded in a course it had nothing to do with."""
     terms = ("negligence", "foreseeability", "remoteness")
-    stray = snippet("A question about negligence in a completely different sense")
+    # Long, so the two-match floor applies to it. A short one is judged on one match now.
+    stray = snippet("A question about negligence in a completely different sense " + "padding " * 40)
     real = snippet("Negligence and remoteness", "Foreseeability limits remoteness of damage.")
 
     assert required_matches(terms) == 2
@@ -249,3 +250,35 @@ def test_whitespace_in_an_answer_is_tidied():
     answer = parse_answer(json.dumps({"answer": "Two   words\nover lines.", "used": []}), [])
 
     assert answer.text == "Two words over lines."
+
+
+def test_a_short_precise_source_is_not_drowned_out_by_long_vague_ones():
+    """The bug this exists for: "How long do I have to bring a defamation claim?" dropped the
+    one row that answered it exactly, because a 93-character statutory line cannot match two
+    words of a chatty question while eight rambling ones can."""
+    terms = keywords("How long do I have to bring a defamation claim?")
+    statute = Snippet(
+        source="limitation periods",
+        course="Limitation Act reference",
+        text="Defamation / malicious falsehood: 1 year",
+        explanation="Under s.4A LA 1980. The clock runs from publication.",
+    )
+    rambling = [
+        snippet(f"A long question about how to bring a claim, number {n}, " + "padding " * 30)
+        for n in range(8)
+    ]
+    # Every rambling one outscores the statute - they match "long", "bring" and "claim" while it
+    # matches only "defamation" - which is exactly why a reserved place is needed.
+
+    ranked = rank([*rambling, statute], terms)
+
+    assert statute in ranked, "the row that answers the question was dropped"
+    assert ranked[0] is statute, "a precise line should outrank a paragraph on the same score"
+
+
+def test_a_long_passage_still_needs_two_matches():
+    """The floor must keep doing its job for the case it was written for."""
+    terms = ("negligence", "foreseeability", "remoteness")
+    stray = snippet("A long passage mentioning negligence once " + "and padding " * 40)
+
+    assert rank([stray], terms) == []
