@@ -12,3 +12,7 @@ venv/
 *.egg-info/
 build/
 dist/
+
+# The exported courses and question bank. Their content, not ours - it goes to
+# their Railway deployment, never to a public repository.
+reference_data.json.gz

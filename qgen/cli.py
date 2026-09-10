@@ -103,6 +103,30 @@ def _generate(args: argparse.Namespace) -> int:
     return 0
 
 
+def _export_reference(args: argparse.Namespace) -> int:
+    from .seed import DEFAULT_PATH, export
+
+    settings = load_settings()
+    with connect(settings.database_url) as conn:
+        counts = export(conn, DEFAULT_PATH)
+    print(f"written to {DEFAULT_PATH}")
+    for table, n in counts.items():
+        print(f"  {table:<24} {n} rows")
+    return 0
+
+
+def _load_reference(args: argparse.Namespace) -> int:
+    from .seed import DEFAULT_PATH, load
+
+    settings = load_settings()
+    with connect(settings.database_url) as conn:
+        report = load(conn, DEFAULT_PATH)
+    print("loaded into this database:")
+    for table, note in report.items():
+        print(f"  {table:<24} {note}")
+    return 0
+
+
 def _serve(args: argparse.Namespace) -> int:
     import uvicorn
 
@@ -125,6 +149,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("courses", help="list the catalogue").set_defaults(run=_courses)
     sub.add_parser("init-db", help="create this package's tables").set_defaults(run=_init_db)
+    sub.add_parser(
+        "export-reference", help="write the courses and question bank to reference_data.json.gz"
+    ).set_defaults(run=_export_reference)
+    sub.add_parser(
+        "load-reference", help="load reference_data.json.gz into this database (additive)"
+    ).set_defaults(run=_load_reference)
 
     run = sub.add_parser("generate", help="generate questions for one course")
     run.add_argument("--course", required=True, help="course code or name, e.g. 'Criminology'")
